@@ -9,7 +9,7 @@
 //
 //enum DayStatus: String, CaseIterable {
 //    case working, off, holiday, sickLeave
-//    
+//
 //    var color: Color {
 //        switch self {
 //        case .working:
@@ -22,7 +22,7 @@
 //            return .pink
 //        }
 //    }
-//    
+//
 //    var label: String {
 //        switch self {
 //        case .working: return "Travail"
@@ -111,7 +111,7 @@
 //                }
 //            }
 //            .navigationTitle("Planning Team Bourbier")
-//          
+//
 //        } detail: {
 //            if showScheduleView {
 //                ScheduleView(employees: employees, days: currentMonthDays())
@@ -169,14 +169,14 @@
 //struct ScheduleView: View {
 //    var employees: [Employee]
 //    let days: [Date]
-//    
+//
 //    private func generateWeeklySchedule(for employee: Employee) -> [ScheduleDay] {
 //        let fixedSchedule: [String: (start: String, end: String)] = [
 //            "Dalila": ("10:00", "18:00"),
 //            "Chris": ("11:30", "20:00"),
 //            "Goran": ("CadO Matin", "CadO Après-Midi") // Remarque: Vous devez adapter cette partie pour gérer correctement ce cas spécifique
 //        ]
-//        
+//
 //        let possibleStartTimes = ["9:30", "10:00", "11:00", "11:30", "12:00"]
 //        let dayDuration = 8 // Durée de travail standard en heures
 //
@@ -196,7 +196,7 @@
 //                    }
 //                }
 //            }
-//            
+//
 //            return ScheduleDay(date: day, hours: hours, isWorkingDay: status == .working, status: status)
 //        }
 //    }
@@ -210,7 +210,7 @@
 //                            Text(employee.name)
 //                                .font(.headline)
 //                                .padding(.bottom, 5)
-//                            
+//
 //                            ForEach(generateWeeklySchedule(for: employee), id: \.date) { scheduleDay in
 //                                HStack {
 //                                    Text(dayLabelFor(day: scheduleDay.date))
@@ -237,7 +237,7 @@
 //        }
 //        .navigationTitle("Planning Généré")
 //    }
-//    
+//
 //    private func dayLabelFor(day: Date) -> String {
 //        let dateFormatter = DateFormatter()
 //        dateFormatter.locale = Locale(identifier: "fr_FR")
@@ -272,7 +272,7 @@
 import SwiftUI
 
 enum DayStatus: String, CaseIterable {
-    case working, off, holiday, sickLeave
+    case working, off, holiday, sickLeave, ltpa
     
     var color: Color {
         switch self {
@@ -284,6 +284,8 @@ enum DayStatus: String, CaseIterable {
             return .green
         case .sickLeave:
             return .pink
+        case .ltpa:
+            return .blue
         }
     }
     
@@ -293,6 +295,7 @@ enum DayStatus: String, CaseIterable {
         case .off: return "RH"
         case .holiday: return "CP"
         case .sickLeave: return "AMAJ"
+        case .ltpa: return "LTPA"
         }
     }
 }
@@ -305,11 +308,11 @@ struct Employee {
 struct ContentView: View {
     @State private var employees: [Employee] = [
         Employee(name: "Dalila"),
-        Employee(name: "Ouizna"),
-        Employee(name: "Goran"),
+        Employee(name: "Lathe"),
+        Employee(name: "Joel"),
         Employee(name: "Chris"),
         Employee(name: "Salim"),
-        Employee(name: "Wassim"),
+        Employee(name: "Salah"),
         Employee(name: "Houssam")
     ]
     @State private var currentDayStatus: DayStatus = .working
@@ -461,10 +464,11 @@ struct ScheduleView: View {
     let days: [Date]
     
     private func generateWeeklySchedule(for employee: Employee) -> [ScheduleDay] {
+        if employee.name == "Salim" {
+            return generateScheduleForSalim(for: employee)
+        }
         let fixedSchedule: [String: (start: String, end: String)] = [
-            "Dalila": ("10:00", "18:00"),
-            "Chris": ("11:30", "20:00"),
-            "Goran": ("CadO Matin", "CadF Après-Midi") // Remarque: Vous devez adapter cette partie pour gérer correctement ce cas spécifique
+            "Joel": ("CadO Matin", "CadF Après-Midi") // Remarque: Vous devez adapter cette partie pour gérer correctement ce cas spécifique
         ]
         
         let possibleStartTimes = ["9:30", "10:00", "11:00", "11:30", "12:00"]
@@ -488,6 +492,40 @@ struct ScheduleView: View {
             }
             
             return ScheduleDay(date: day, hours: hours, isWorkingDay: status == .working, status: status)
+        }
+    }
+
+    private func generateScheduleForSalim(for employee: Employee) -> [ScheduleDay] {
+        let calendar = Calendar.current
+        let possibleStartTimes = ["9:30", "10:00", "11:00", "11:30", "12:00"]
+        let dailyMinutes = 390 // 6h30 = 390 minutes pour totaliser 26h sur 4 jours
+
+        return days.map { day -> ScheduleDay in
+            let weekday = calendar.component(.weekday, from: day) // 1=dimanche ... 6=vendredi, 7=samedi
+
+            // Vendredi: toujours LTPA, on ignore toute sélection manuelle pour ce jour
+            if weekday == 6 {
+                return ScheduleDay(date: day, hours: nil, isWorkingDay: false, status: .ltpa)
+            }
+
+            // Comportement identique aux autres jours: l'utilisateur sélectionne le statut
+            let status = employee.selectedDays[day] ?? .off
+
+            // Si jour travaillé sélectionné → calcul d'horaires automatiques sur 6h30
+            if status == .working {
+                if let startTimeString = possibleStartTimes.randomElement(),
+                   let startTime = timeFromString(startTimeString),
+                   let endTime = calendar.date(byAdding: .minute, value: dailyMinutes, to: startTime) {
+                    let endTimeString = stringFromTime(endTime)
+                    return ScheduleDay(date: day, hours: (start: startTimeString, end: endTimeString), isWorkingDay: true, status: .working)
+                } else {
+                    // fallback
+                    return ScheduleDay(date: day, hours: (start: "10:00", end: "16:30"), isWorkingDay: true, status: .working)
+                }
+            }
+
+            // Sinon: pas d'horaires, on affiche le label du statut sélectionné (RH/CP/AMAJ/LTPA/off)
+            return ScheduleDay(date: day, hours: nil, isWorkingDay: false, status: status)
         }
     }
 
